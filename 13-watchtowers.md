@@ -173,7 +173,7 @@ The client:
 * MUST set `encrypted_blob` to the encryption of the `penalty_transaction` as specified in [Transaction Locator and Encryption Key](#transaction-locator-and-encryption-key).
 * MUST set `encrypted_blob_len` to the length of `encrypted_blob`.
 * MUST set `user_signature ` to the appointment signature as specified in [LINK](LINK)
-* MUST set `signature_len` to the length of `signature`.
+* MUST set `signature_len` to the length of `user_signature`.
 * MAY set `to_self_delay` to the `to_self_delay` requested by the client to its peer.
 
 The server:
@@ -194,6 +194,17 @@ If the server accepts the appointment:
 If the server rejects the appointment:
 
 * MUST send an `appointment_rejected` message.
+
+
+#### Appointment request signature format
+
+Appointment request must be arrenged as follows while serialized for signing:
+
+	txlocator | tab_id | encrypted_blob {| to_self_delay}
+	
+`to_self_delay` will only be included if it is also included in the request. 
+
+The signature must be performed following [Data serilization and signing](#data-serilization-and-signing).
 
 #### Rationale
 
@@ -231,8 +242,7 @@ This message contains information about the acceptance of an appointment by the 
 4. types:
 	1. type: 2 (`signed_receipt`)
 	2. data:
-		* [`tu16*byte `: `receipt`]
-		* [`tu16*byte`: `signature`]
+		* [`tu16*byte`: `tower_signature`]
 
 The server:
 
@@ -242,8 +252,8 @@ The server:
 
 If `accountability` is being offered and `add_update_appointment` contained `to_self_delay`:
 
-* MUST set `receipt` to a receipt built according to [Receipt-Format](#receipt-format).
-* MUST set `signature` to the signature of the receipt.
+* MUST create a receipt according to [Appoinmtent receipt format](#appointment-receipt-format).
+* MUST set `tower_signature` to the signature of the receipt as defined in [Appointment receipt serialisation and signature](#appointment-receipt-serialisation-and-signature).
 
 The client:
 
@@ -275,6 +285,22 @@ The server:
 
 The `appointment_rejected` message follows the approach taken by the `error` message defined in [BOLT#1](https://github.com/lightningnetwork/lightning-rfc/blob/master/01-messaging.md#the-error-message): error codes are mandatory, whereas reasons are optional and implementation dependant.
 
+### Appointment receipt format 
+
+The server MUST create a receipt preserving the following order:
+
+	[txlocator, tab_id, encrypted_blob, to_self_delay, user_signature, start_block]
+	
+The receipt must be signed following [Data serilization and signing](#data-serilization-and-signing).
+
+#### Rationale
+
+We assume the tower has a well-known public key and the user is aware of it.
+
+The receipt contains, mainly, the information provided by the user. The Watchtower will need to sign the receipt to provide evidence of agreement.
+
+The `user_signature` is included in the receipt to link both the client request and the server response. Otherwise, the tower could sign a receipt with different data that the one sent by the user, and the user would have no way to prove whether that's true or not. By signing the customer signature the tower creates evidence of what the user sent, since the tower cannot forge the client's signature.
+
 ## Delete appointments
 
 A client may want to delete appointments from the tower after a breach, or closing a channel:
@@ -296,7 +322,7 @@ The user:
 
 * MUST set `locator` as specified in [Transaction Locator and Encryption Key](#transaction-locator-and-encryption-key).
 * MUST set `user_signature ` to the appointment signature as specified in [LINK](LINK)
-* MUST set `signature_len` to the length of `signature`.
+* MUST set `signature_len` to the length of `user_signature`.
 
 The server:
 
@@ -321,7 +347,7 @@ This message contains information about the acceptance of an appointment deletio
 4. types:
 	1. type: 2 (`signed_receipt`)
 	2. data:
-		* [`tu16*byte`: `signature`]
+		* [`tu16*byte`: `tower_signature`]
 
 The server:
 
@@ -330,11 +356,19 @@ The server:
 
 If `accountability` is being offered it was requested for the appointment appointment:
 
-* MUST set `signature` to the signature as specified in [LINK]().
+* MUST set `tower_signature` to the signature as specified in [LINK]().
 
 The client:
 
 * MUST fail the connection  if `locator` does not match the `locator` from `delete_appointment`.
+
+#### Deletion 
+#### Deletion receipt format
+
+The deletion receipt contains a single message:
+
+
+
 
 ### The `appointment_deletion_rejected` message
 
@@ -360,7 +394,7 @@ The server:
 Deletion rejection should include cases like the appointment cannot be found for the requesting user (either because it never existed, or because it was already deleted).
 The same approach as for `appointment_rejected` error messages is followed here.
 
-## Delete tab
+## Delete tabs
 
 If the user has decided to group appointments in tabs, all appointments belonging to the same tab can be deleted with a single request. The rationale for this is the same as for [Delete appointments](#delete-appointments), but minimising the interaction between client and server.
 
@@ -381,7 +415,7 @@ The user:
 
 * MUST set `short_channel_id` to a 8-byte value identifying the tab to be deleted.
 * MUST set `user_signature ` to the appointment signature as specified in [LINK](LINK)
-* MUST set `signature_len` to the length of `signature`.
+* MUST set `signature_len` to the length of `user_signature`.
 
 The server:
 
@@ -403,7 +437,7 @@ This message contains information about the acceptance of a tab deletion by the 
 4. types:
 	1. type: 2 (`signed_receipt`)
 	2. data:
-		* [`tu16*byte`: `signature`]
+		* [`tu16*byte`: `tower_signature`]
 
 The server:
 
@@ -412,7 +446,7 @@ The server:
 
 If `accountability` is being offered it was requested for the appointment appointment:
 
-* MUST set `signature` to the signature as specified in [LINK]().
+* MUST set `tower_signature` to the signature as specified in [LINK]().
 
 The client:
 
@@ -437,28 +471,6 @@ The server:
 * MAY set and empty `reason` field.
 * MUST set `reason_len` to length of `reason`.
 
-#### Receipt Format 
-
-The server MUST create the receipt containing the following information:
-
-	txlocator
-	tab_id
-	encrypted_blob
-	to_self_delay
-	user_signature
-	
-
-#### Rationale
-
-We assume the tower has a well-known public key and the user is aware of it.
-
-The receipt contains, mainly, the information provided by the user. The Watchtower will need to sign the receipt to provide evidence of agreement.
-
-The `user_signature` is included in the receipt to link both the client request and the server response. Otherwise, the tower could sign a receipt with different data that the one sent by the user, and the user would have no way to prove whether that's true or not. By signing the customer signature the tower creates evidence of what the user sent, since the tower cannot forge the client's signature.
-
-#### Receipt serialisation and signature
-
-[FIXME: TBD]
 
 ## Transaction Locator and Encryption Key
 
@@ -509,6 +521,14 @@ The micropayment approach can be achieved using the same method as the subscript
 
 The ideal approach could be something in between. The tower is paid via a subscription to cover the storage costs and making DoS attacks having a financial cost. On top of that, the penalty transactions can include an output for the tower so 
 the tower is encouraged to watch for beaches whilst allowing fee-bumping. 
+
+## Data serilization and signing
+
+Request and receipts are serialized in big-endian, concatenating their values in the given order if they contain more than one value (as is the case of the appointment receipt). The signature algorithm follows the approach developed by lnd and currently implemented by both lnd and c-lightning [#specinatweet](https://twitter.com/rusty_twit/status/1182102005914800128):
+
+Signatures are [zbase32 encoded](https://philzimmermann.com/docs/human-oriented-base-32-encoding.txt) and are performed over the sha256d of the message (`receipt` serialization) prefixed by `"Lightning Signed Message:"`, that is:
+
+	zbase32(SigRec(SHA256(SHA256("Lightning Signed Message:" + serialized_data))))
 
 ## No compression of penalty transaction 
 
