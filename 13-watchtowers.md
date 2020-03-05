@@ -152,7 +152,6 @@ This message contains all the information regarding an appointment between the c
 1. type: ? (`add_update_appointment`)
 2. data:
    * [`16*byte`:`locator`]
-   * [`short_channel_id`: `tab_id`]
    * [`u16`: `encrypted_blob_len`]
    * [`encrypted_blob_len*byte`:`encrypted_blob`]
    * [`u16`: `signature_len`]
@@ -168,8 +167,6 @@ This message contains all the information regarding an appointment between the c
 The client:
 
 * MUST set `locator` as specified in [Transaction Locator and Encryption Key](#transaction-locator-and-encryption-key).
-* MUST set `tab_id` to a 8-byte value.
-* SHOULD use the same `tab_id` for all appointments coming from the same channel.
 * MUST set `encrypted_blob` to the encryption of the `penalty_transaction` as specified in [Transaction Locator and Encryption Key](#transaction-locator-and-encryption-key).
 * MUST set `encrypted_blob_len` to the length of `encrypted_blob`.
 * MUST set `user_signature ` to the appointment signature as specified in [LINK](LINK)
@@ -200,7 +197,7 @@ If the server rejects the appointment:
 
 Appointment request must be arrenged as follows while serialized for signing:
 
-	txlocator | tab_id | encrypted_blob {| to_self_delay}
+	txlocator | encrypted_blob {| to_self_delay}
 	
 `to_self_delay` will only be included if it is also included in the request. 
 
@@ -213,10 +210,6 @@ We define appointment as the way that the Watchtower is hired / requested by a c
 Users must be registered before any service can be provided, as discussed in [User authentication](#user-authentication). Appointments from non-registered users are therefore rejected.
 
 A client may need to update an appointment after having sent it to the tower (for instance to update the fee, change the outputs, etc). The same message can be used to add new appointment or to update existing ones. If two appointments from the same user share a `locator`, the tower should interpret that as an update and override the oldest. `locators` are 128-bit values so unintended collisions whithin the same user should be unlikely.
-
-Users should identify appointments from the same channels using the same `tab_id` so it is easier to clear all the data when a channel is closed. `tab_ids` can be derived from `channel_ids` using a secret `magic_number` and then shortened to fit the `short_channel_id` lenght. Deriving `tab_ids` from `channel_ids` reduce the amount of information that the user has to keep around (since the same `magic_number` can be used for all channel derivations within the same tower).
-
-Grouping appointments in tabs leaks the amount of updates of a blinded channel. Users can choose not to group appointments in tabs by setting a random `tab_id` for each appointment. However, this will increase the number of messages exchanged between the user and the server to clear all appointments belonging to the same channel (`1` vs `n` messages for `n` updates).
 
 Block ciphers have a size multiple of the block length, which depends on the key size. Therefore the `encrypted_blob` have to be at least as big as:
 
@@ -289,7 +282,7 @@ The `appointment_rejected` message follows the approach taken by the `error` mes
 
 The server MUST create a receipt preserving the following order:
 
-	[txlocator, tab_id, encrypted_blob, to_self_delay, user_signature, start_block]
+	[txlocator, encrypted_blob, to_self_delay, user_signature, start_block]
 	
 The receipt must be signed following [Data serilization and signing](#data-serilization-and-signing).
 
@@ -393,84 +386,6 @@ The server:
 
 Deletion rejection should include cases like the appointment cannot be found for the requesting user (either because it never existed, or because it was already deleted).
 The same approach as for `appointment_rejected` error messages is followed here.
-
-## Delete tabs
-
-If the user has decided to group appointments in tabs, all appointments belonging to the same tab can be deleted with a single request. The rationale for this is the same as for [Delete appointments](#delete-appointments), but minimising the interaction between client and server.
-
-		+-------+                                    +-------+
-		|   A   |--(1)---       delete_tab      ---->|   B   |
-		|       |<-(2)---   accepted/rejected   -----|       |
-		+-------+                                    +-------+
-		
-		- where node A is 'client' and node B is 'server'
-
-1. type: ? (`delete_tab`)
-2. data:
-   * [`short_channel_id`:`tab_id`]
-   * [`u16`: `signature_len`]
-	* [`signature_len*byte`: `user_signature`]
-
-The user: 
-
-* MUST set `short_channel_id` to a 8-byte value identifying the tab to be deleted.
-* MUST set `user_signature ` to the appointment signature as specified in [LINK](LINK)
-* MUST set `signature_len` to the length of `user_signature`.
-
-The server:
-
-* MUST compute `public_key` by performing EC recover as specified in [LINK]().
-* If the recovered `public_key` has an associated tab with id matching `tab_id`:
-	* MUST delete the tab and send `tab_deletion_accepted`.
-* Otherwise:
-	* MUST reject the deletion request and send `tab_deletion_rejected`.
-
-
-### The `tab_deletion_accepted` message
-
-This message contains information about the acceptance of a tab deletion by the Watchtower.
-
-1. type: ? (`tab_deletion_accepted`)
-2. data:
-   * [`short_channel_id`:`tab_id`]
-3. tlvs: `wt_accountability_tlvs`
-4. types:
-	1. type: 2 (`signed_receipt`)
-	2. data:
-		* [`tu16*byte`: `tower_signature`]
-
-The server:
-
-* MUST receive `delete_tab` before sending an `tab_deletion_accepted` message.
-* MUST set the `locator` to match the one received in `delete_tab`.
-
-If `accountability` is being offered it was requested for the appointment appointment:
-
-* MUST set `tower_signature` to the signature as specified in [LINK]().
-
-The client:
-
-* MUST fail the connection  if `tab_id` does not match the `tab_id` from `delete_tab`.
-
-### The `tab_deletion_rejected` message
-
-This message contains information about the rejection of a tab deletion by the Watchtower.
-
-1. type: ? (`tab_deletion_rejected`)
-2. data:
-   * [`short_channel_id`:`tab_id`]
-   * [`u16`: `rcode`]
-   * [`u16`: `reason_len`
-   * [`reason_len*byte`: `reason`]
-
-The server:
-
-* MUST receive `delete_tab` before sending an `tab_deletion_rejected` message.
-* MUST set the `tab_id` to match the one received in `delete_tab`.
-* MUST set `rcode` to the rejection code.
-* MAY set and empty `reason` field.
-* MUST set `reason_len` to length of `reason`.
-
 
 ## Transaction Locator and Encryption Key
 
