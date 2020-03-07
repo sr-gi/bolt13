@@ -467,6 +467,7 @@ For example, for a deletion request of appointment identified by locator `4a5e1e
 The storage requirements for a Watchtower can be reduced (linearly) by implementing [shachain](https://github.com/rustyrussell/ccan/blob/master/ccan/crypto/shachain/design.txt), therefore storing the parts required to build the transaction and the corresponding signing key instead of the full transaction. For now, we have decided to keep the hiring protocol simple. Storage is relatively cheap and we can revisit this standard if it becomes a problem. 
 
 ## Attacks on towers
+[TBD]
 
 ## FIXMES
 
