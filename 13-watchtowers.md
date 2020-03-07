@@ -21,7 +21,7 @@ The scope of this bolt does not include:
 
  - Watchtower server discovery.
  
-For the rest of this document we will use server/tower and client/Lightning node indistingushly.
+For the rest of this document we will use server/tower and client/Lightning node indistinguishably.
 
 ## Table of Contents 
 * [Watchtower discovery](#watchtower-discovery)
@@ -79,8 +79,8 @@ The `register_top_up` message contains the information required to start the reg
 
 The client:
 
-- MUST set `public_key` to the public key he wants to register.
-- MUST set `appointment_slots` to the maximum number of appointments he is requesting.
+- MUST set `public_key` to the public key he wants to register or top up.
+- MUST set `appointment_slots` to the appointment slots he is requesting.
 - MUST set `subscription_period` to the number of blocks he is asking the tower to watch for channel breaches.
 
 Upon receiving a `register_top_up` message, the server:
@@ -127,9 +127,9 @@ The mechanism used to authenticate users by the tower is based on message signin
 
 `appointment_slots` and `subscription_period` are requested by the user to reduce the number of messages exchanged by the two parties whilst allowing for high customisation. Otherwise the tower will need to inform the user of what type of services he can apply for. 
 
-`appointment_max_size` defines what is the maximum size of an appointment. The tower is efectively charging for storage over time, so if an appointment exceeds `appointment_max_size` it will be count as `ceil(len(appointment)/appointment_max_size)`. 
+`appointment_max_size` defines what is the maximum size of an appointment. The tower is effectively charging for storage over time, so if an appointment exceeds `appointment_max_size` it will be count as `ceil(len(appointment)/appointment_max_size)`. 
 
-Once the user is registered, the tower will be able to identify him by doing EC recovery on his signed requests. Message signing and EC recover is performed using the current approach followed by lnd and c-lightning.
+Once the user is registered, the tower will be able to identify him by doing EC recovery on his signed requests. Message signing and EC recover is performed using the current approach followed by [lnd and c-lightning](#data-serialisationa-and-signing).
 
 If a user fills all his appointment slots, or need to keep the data in the tower for longer than the `subscription_period`, he may need to top up his subscription.
 
@@ -180,7 +180,7 @@ The server:
 
 If `accountability` is being offered and `to_self_delay` can be found in `add_update_appointment`:
 
-* MUST reject thea appointment if `to_self_delay` is to small.
+* MUST reject the appointment if `to_self_delay` is too small.
 * MAY accept the appointment otherwise.
 
 If the server accepts the appointment:
@@ -194,13 +194,13 @@ If the server rejects the appointment:
 
 #### Signing appointment requests
 
-Appointment request must be arrenged as follows while serialized for signing:
+Appointment request must be arranged as follows while serialised for signing:
 
 	txlocator | encrypted_blob {| to_self_delay}
 	
 `to_self_delay` will only be included if it is also included in the request. 
 
-The signature must be performed following [Data serilization and signing](#data-serilization-and-signing).
+The signature must be performed following [Data serialisation and signing](#data-serialisation-and-signing).
 
 #### Rationale
 
@@ -208,7 +208,7 @@ We define appointment as the way that the Watchtower is hired / requested by a c
 
 Users must be registered before any service can be provided, as discussed in [User authentication](#user-authentication). Appointments from non-registered users are therefore rejected.
 
-A client may need to update an appointment after having sent it to the tower (for instance to update the fee, change the outputs, etc). The same message can be used to add new appointment or to update existing ones. If two appointments from the same user share a `locator`, the tower should interpret that as an update and override the oldest. `locators` are `128-bit` values so unintended collisions whithin the same user should be unlikely.
+A client may need to update an appointment after having sent it to the tower (for instance to update the fee, change the outputs, etc). The same message can be used to add new appointment or to update existing ones. If two appointments from the same user share a `locator`, the tower should interpret that as an update and override the oldest. `locators` are `128-bit` values so unintended collisions within the same user should be unlikely.
 
 Block ciphers have a size multiple of the block length, which depends on the key size. Therefore the `encrypted_blob` have to be at least as big as:
 
@@ -245,7 +245,7 @@ The server:
 If `accountability` is being offered and `add_update_appointment` contained `to_self_delay`:
 
 * MUST create a receipt of the appointment.
-* MUST set `tower_signature` to the signature of the receipt as defined in [Data serialisation and signing](#data-serialization-and-signing).
+* MUST set `tower_signature` to the signature of the receipt as defined in [Data serialisation and signing](#data-serialisation-and-signing).
 
 The client:
 
@@ -257,15 +257,13 @@ Data must be arranged in the following order to create the receipt:
 
 	[txlocator, encrypted_blob, to_self_delay, user_signature, start_block]
 	
-The receipt must be signed following [Data serilization and signing](#data-serilization-and-signing).
+The receipt must be signed following [Data serialisation and signing](#data-serialisation-and-signing).
 
 #### Rationale
 
-`start_block` should be set by the tower so the user knows when the channel update will be covered. 
+`start_block` sis set by the tower so the user knows when the channel update will be covered. 
 
-We assume the tower has a well-known public key and the user is aware of it.
-
-The receipt contains, mainly, the information provided by the user. The Watchtower will need to sign the receipt to provide evidence of agreement.
+We assume the tower has a well-known public key and the user is aware of it. The receipt contains, mainly, the information provided by the user. The Watchtower will need to sign the receipt to provide evidence of agreement.
 
 The `user_signature` is included in the receipt to link both the client request and the server response. Otherwise, the tower could sign a receipt with different data that the one sent by the user, and the user would have no way to prove whether that's true or not. By signing the customer signature the tower creates evidence of what the user sent, since the tower cannot forge the client's signature.
 
@@ -321,28 +319,30 @@ The server:
 
 * MUST compute `public_key` by performing EC recover.
 * If the recovered `public_key` has an associated appointment with locator matching `locator`:
-	* MUST delete the appointment and send `appointment_deletion_accepted`.
+	* MUST delete the appointment and send `deletion_accepted`.
 * Otherwise:
-	* MUST reject the deletion request and send `appointment_deletion_rejected`.
+	* MUST reject the deletion request and send `deletion_rejected`.
 
 
 #### Signing deletion requests
 
 Deletion requests must contain a signature of the following message:
 
-"Delete appointment \<locator\>", where \<locator\> MUST match `locator`. 
+	"Delete appointment <locator>" 
+	
+where `<locator>` MUST match `locator`. 
 
-The signature must be performed following [Data serilization and signing](#data-serilization-and-signing).
+The signature must be performed following [Data serialisation and signing](#data-serialisation-and-signing).
 
 #### Rationale
 
-Freeing expired appointment from the tower (after a channel clousure or breach) should be beneficial for both parties. From the tower side, it allows to reduce the load and free space, for the user side, it recovers space that was used by useless appointments, so it can be used to back up new channel updates.
+Freeing expired appointment from the tower (after a channel clousure or breach) should be beneficial for both parties. From the tower side, it allows to reduce the load and free space, for the user side, it recovers space that was used by expired appointments, so it can be used to back up new channel updates.
 
-### The `appointment_deletion_accepted` message
+### The `deletion_accepted` message
 
 This message contains information about the acceptance of an appointment deletion by the Watchtower.
 
-1. type: ? (`appointment_deletion_accepted`)
+1. type: ? (`deletion_accepted`)
 2. data:
    * [`16*byte `:`locator`]
 3. tlvs: `wt_accountability_tlvs`
@@ -353,23 +353,23 @@ This message contains information about the acceptance of an appointment deletio
 
 The server:
 
-* MUST receive `delete_appointment` before sending an `appointment_deletion_accepted` message.
+* MUST receive `delete_appointment` before sending an `deletion_accepted` message.
 * MUST set the `locator` to match the one received in `delete_appointment`.
 
 If `accountability` is being offered it was requested for the appointment appointment:
 
-* MUST set `tower_signature` to the signature of `user_signature` as specified follwing [Data serilization and signing](#data-serilization-and-signing).
+* MUST set `tower_signature` to the signature of `user_signature` as specified following [Data serialisation and signing](#data-serialisation-and-signing).
 
 The client:
 
 * MUST fail the connection  if `locator` does not match the `locator` from `delete_appointment`.
 
 
-### The `appointment_deletion_rejected` message
+### The `deletion_rejected` message
 
 This message contains information about the rejection of an appointment deletion by the Watchtower.
 
-1. type: ? (`appointment_deletion_rejected`)
+1. type: ? (`deletion_rejected`)
 2. data:
    * [`16*byte `:`locator`]
    * [`u16`: `rcode`]
@@ -378,7 +378,7 @@ This message contains information about the rejection of an appointment deletion
 
 The server:
 
-* MUST receive `delete_appointment` before sending an `appointment_deletion_rejected` message.
+* MUST receive `delete_appointment` before sending an `deletion_rejected` message.
 * MUST set the `locator` to match the one received in `delete_appointment`.
 * MUST set `rcode` to the rejection code.
 * MAY set and empty `reason` field.
@@ -424,7 +424,7 @@ Sample code (python) for the client to prepare the `encrypted_blob`:
 	    
 ## Payment modes 
 
-The three most common ways of payig a tower are:
+The three most common ways of paying a tower are:
 
 **On-chain bounty**. An additional output is created in the penalty transaction that will reward the Watchtower. 
 
@@ -439,13 +439,13 @@ The micropayment approach can be achieved using the same method as the subscript
 The ideal approach could be something in between. The tower is paid via a subscription to cover the storage costs and making DoS attacks having a financial cost. On top of that, the penalty transactions can include an output for the tower so 
 the tower is encouraged to watch for beaches whilst allowing fee-bumping. 
 
-## Data serilization and signing
+## Data serialisation and signing
 
-Request and receipts are serialized in big-endian, concatenating their values in the given order if they contain more than one value (as is the case of the appointment receipt). The signature algorithm follows the approach developed by lnd and currently implemented by both lnd and c-lightning [#specinatweet](https://twitter.com/rusty_twit/status/1182102005914800128):
+Request and receipts are serialised in big-endian, concatenating their values in the given order if they contain more than one value (as is the case of the appointment receipt). The signature algorithm follows the approach developed by lnd and currently implemented by both lnd and c-lightning [#specinatweet](https://twitter.com/rusty_twit/status/1182102005914800128):
 
 Signatures are [zbase32 encoded](https://philzimmermann.com/docs/human-oriented-base-32-encoding.txt) and are performed over the sha256d of the message prefixed by `"Lightning Signed Message:"`, that is:
 
-	zbase32(SigRec(SHA256(SHA256("Lightning Signed Message:" + serialized_data))))
+	zbase32(SigRec(SHA256(SHA256("Lightning Signed Message:" + serialised_data))))
 	
 For example, for a deletion request of appointment identified by locator `4a5e1e4baab89f3a32518a88c3bc87f6`, the structure will be:
 
@@ -467,6 +467,7 @@ The storage requirements for a Watchtower can be reduced (linearly) by implement
 
 - The tower may also need to reply with `appointment_slots` during the registration phase so a minimum amount of appointments are paid for. Check [attacks on towers](#attacks-on-towers). Therefore hiring the tower for a single appointment may be problematic.
 - Signature on the deletion acceptance by the server may not be necessary.
+- Appointment deletion can be performed in bulk, by allowing sending more than one appointment at a time. That could result in a privacy leak though, since the tower will be able to link what appointments belonged to the same channel.
 
 
 ## Acknowledgments
