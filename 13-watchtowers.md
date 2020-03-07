@@ -31,7 +31,7 @@ For the rest of this document we will use server/tower and client/Lightning node
 * [User authentication](#user-authentication)
 	* [The `register_top_up` message](#the-register_top_up-message)
 	* [The `subscription_deltais` message](#the-subscription_details-message)
-* [Sending appointments to the tower](#sending-and-receiving-appointments)
+* [Sending appointments to the tower](#sending-appointments-to-the-tower)
  	* [The `add_update_appointment` message](#the-add_update_appointment-message)
  	* [The `appointment_accepted` message](#the-appointment_accepted-message)
  	* [The `appointment_rejected` message](#the-appointment_rejected-message)
@@ -43,8 +43,8 @@ For the rest of this document we will use server/tower and client/Lightning node
 * [Encryption Algorithms and Parameters](#encryption-algorithms-and-parameters)
 * [Payment Modes](#payment-modes)
 * [Data serialisation and signing](#data-serialisation-and-signing)
-* [Attacks on towers](#attacks-on-towers)
 * [No compression of penalty transaction](#no-compression-of-penalty-transaction)
+* [Attacks on towers](#attacks-on-towers)
 
 ## Watchtower discovery
 
@@ -140,6 +140,8 @@ Once the user is registered, the tower will be able to identify him by doing EC 
 
 If a user fills all his appointment slots, or need to keep the data in the tower for longer than the `subscription_period`, he may need to top up his subscription.
 
+For now only `subscription_invoice` tlv has been defined as payment method. Other payment methods can be defined as tlv in the future.
+
 ## Sending appointments to the tower
 
 Once the client is registered with the tower, he can start backing up state updates by sending appointments to the tower:
@@ -228,6 +230,8 @@ and at most as big as:
 `minimum_viable_transaction_size` and `maximum_viable_transaction_size` refer to the minimum/maximum size required to create a valid transaction. 
 
 `encrypted_blob`s outside those boundaries cannot contain valid transactions, so they should be rejected.
+
+A tower should broadcast a penalty transaction right after a breach is seen, but should be also able to bump the fee is necessary. A too small `to_self_delay` can make the tower fail to do so. 
 	
 ### The `appointment_accepted` message
 
@@ -468,13 +472,15 @@ The storage requirements for a Watchtower can be reduced (linearly) by implement
 
 - Define a proper tower discovery.
 - None of the message types have been defined (they have been left with ?).
-- Define errors (transient vs permanently)
+- Define errors (transient vs permanently).
+- Add attacks on towers
 
 ## DISCUSS
 
-- The tower may also need to reply with `appointment_slots` during the registration phase so a minimum amount of appointments are paid for. Check [attacks on towers](#attacks-on-towers). Therefore hiring the tower for a single appointment may be problematic.
+- The tower may also need to reply with `appointment_slots` during the registration phase so a minimum amount of appointments are paid for. Check [Trustless WatchTowers?](https://lists.linuxfoundation.org/pipermail/lightning-dev/2018-April/001203.html). Therefore hiring the tower for a single appointment may be problematic.
 - Signature on the deletion acceptance by the server may not be necessary.
 - Appointment deletion can be performed in bulk, by allowing sending more than one appointment at a time. That could result in a privacy leak though, since the tower will be able to link what appointments belonged to the same channel.
+- Separate register and top up so proofs can be used for top ups, in a similar way to [Dead Men's Button](https://github.com/joostjager/deadmensbutton)
 
 
 ## Acknowledgments
