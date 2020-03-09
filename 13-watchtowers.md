@@ -2,11 +2,11 @@
 
 ## Overview
 
-All off-chain protocols assume the user remains online and synchronised with the network. To alleviate this assumption, customers can hire a third party watching service (a.k.a Watchtower) to watch the blockchain and respond to channel breaches on their behalf. 
+All off-chain protocols assume the user remains online and synchronised with the network. To alleviate this assumption, customers can hire a third party watching service (a.k.a Watchtower) to watch the blockchain and respond to channel breaches on their behalf.
 
-At a high level, the client sends an encrypted penalty transaction alongside a transaction locator to the Watchtower. Both the encryption key and the transaction locator are derived from the commitment transaction id, meaning that the Watchtower will be able to decrypt the penalty transaction only after the corresponding breach is seen on the blockchain. Therefore, the Watchtower does not learn any information about the client's channel unless there is a channel breach (channel-privacy).
+At a high level, every time there is a new transfer in the client's lightning channel, the client sends the Watchtower an encrypted penalty transaction and a transaction locator. Internally, the Watchtower maps the transaction locator to the encrypted penalty transaction. If there is a breach in the lightning channel, the Watchtower can identify it with the locator, and use the commitment transaction ID to compute the decryption key. With the decryption key, the tower decrypt the encrypted penalty transaction and broadcast it to the network. Therefore, the Watchtower does not learn any information about the client's channel unless there is a channel breach (channel-privacy). 
 
-Due to replace-by-revocation Lightning channels, the client should send data to the Watchtower for every new update in the channel, otherwise the Watchtower may not be able to respond to specific breaches. 
+Due to replace-by-revocation Lightning channels, the client should send data to the Watchtower for every new update in the channel, otherwise the Watchtower cannot respond to all potential breaches.
 
 Finally, optional extensions can be offered by the Watchtower to provide stronger guarantees to the client, such as a signed receipt for every new job. The rationale for the receipt is to build an _accountable_ Watchtower as the customer can later use it as publicly verifiable evidence if the Watchtower fails to protect them.
 
@@ -28,9 +28,9 @@ For the rest of this document we will use server/tower and client/Lightning node
 * [Watchtower services](#watchtower-discovery)
 	* [Basic Service](#basic-service)
 	* [Extensions](#extensions)
-* [User authentication](#user-authentication)
+* [User authentication](#user-authentication-and-subscriptions)
 	* [The `register_top_up` message](#the-register_top_up-message)
-	* [The `subscription_deltais` message](#the-subscription_details-message)
+	* [The `subscription_details` message](#the-subscription_details-message)
 * [Sending appointments to the tower](#sending-appointments-to-the-tower)
  	* [The `add_update_appointment` message](#the-add_update_appointment-message)
  	* [The `appointment_accepted` message](#the-appointment_accepted-message)
@@ -56,13 +56,13 @@ We have not defined how a client can find a list of servers to hire yet. We assu
 The customer can hire the Watchtower to watch for breaches on the blockchain and relay a penalty transaction on their behalf. The customer receives an acknowledgement when the Watchtower has accepted the job, but the hiring protocol does not guarantee the transaction inclusion.
 
 ### Extensions
-Extensions build on top of the basic service are optionally provided by the tower. Different kind of extensions can be offered by the tower. For now we are defining a single type of extension `accountability`.
+Extensions build on top of the basic service and are optionally provided by the tower. Different extensions can be offered by the tower. For now we are defining a single type of extension: `accountability`.
 
 #### `accountability`
 
 A Watchtower provides a signed receipt to the customer. This is considered reputational accountability as the customer has publicly verifiable cryptographic evidence the Watchtower was hired. The receipt can be used to prove the Watchtower did not relay the penalty transaction on their behalf and/or request a refund.
 
-## User authentication
+## User authentication and subscriptions
 
 Upon establishing the first connection with the tower, the client needs to register a public key. The registration aims to give the user access to the tower's services: 
 
@@ -81,6 +81,10 @@ The `register_top_up` message contains the information required to start the reg
    * [`point`:`public_key`]
    * [`u32`: `appointment_slots`]
    * [`u32`: `subscription_period`]
+
+#### Rationale
+
+We define appointment (in a lack of a better word) as how the Watchtower is hired by a client for its watching services. Every a client updates the state of one of his channels, he will send an appointment containing information related to the update. Check [Sending appointments to the tower](#sending-appointments-to-the-tower) for more on this.
 
 #### Requirements
 
@@ -126,7 +130,7 @@ If `subscription_invoice` is set:
 
 * MAY pay the [BOLT11](https://github.com/lightningnetwork/lightning-rfc/blob/master/11-payment-encoding.md) `invoice`.
 
-### Rationale 
+#### Rationale 
 
 User authentication with the tower is required to allow interaction with the tower beyond simply sending channel updates (like requesting, updating or deleting channel updates). Authentication is also required to account for the amount of data the client is sending to the tower, so subscriptions models can be properly defined.
 
@@ -134,17 +138,17 @@ The mechanism used to authenticate users by the tower is based on message signin
 
 `appointment_slots` and `subscription_period` are requested by the user to reduce the number of messages exchanged by the two parties whilst allowing for high customisation. Otherwise the tower will need to inform the user of what type of services he can apply for. 
 
-`appointment_max_size` defines what is the maximum size of an appointment. The tower is effectively charging for storage over time, so if an appointment exceeds `appointment_max_size` it will be count as `ceil(len(appointment)/appointment_max_size)`. 
+`appointment_max_size` defines what is the maximum size of an appointment. The tower is effectively charging for storage over time, so if an appointment exceeds `appointment_max_size` it will be counted as `ceil(len(appointment)/appointment_max_size)`. 
 
-Once the user is registered, the tower will be able to identify him by doing EC recovery on his signed requests. Message signing and EC recover is performed using the current approach followed by [lnd and c-lightning](#data-serialisationa-and-signing).
+Once the user is registered, the tower will be able to identify him by doing EC recovery on his signed requests. Message signing and EC recover is performed using the current approach followed by [lnd and c-lightning](#data-serialisation-and-signing).
 
-If a user fills all his appointment slots, or need to keep the data in the tower for longer than the `subscription_period`, he may need to top up his subscription.
+If a user has filled all his appointment slots, or need to keep the data in the tower for longer than the `subscription_period`, he may need to top up his subscription.
 
-For now only `subscription_invoice` tlv has been defined as payment method. Other payment methods can be defined as tlv in the future.
+For now we have only defined `subscription_invoice` as payment method. Other payment methods can be defined as tlv in the future.
 
 ## Sending appointments to the tower
 
-Once the client is registered with the tower, he can start backing up state updates by sending appointments to the tower:
+Once the client is registered, he can start sending appointments to the tower:
 
 		+-------+                                     +-------+
 		|   A   |--(1)--- add_update_appointment ---->|   B   |
@@ -166,7 +170,7 @@ This message contains all the information regarding an appointment between the c
 	* [`signature_len*byte`: `user_signature`]
 3. tlvs: `wt_accountability_tlvs`
 4. types:
-	1. type: 1. (`user_evidence`)
+	1. type: 1 (`user_evidence`)
 	2. data:
 		* [`u64 `:`to_self_delay`]
 
@@ -205,7 +209,7 @@ If the server rejects the appointment:
 
 Appointment request must be arranged as follows while serialised for signing:
 
-	txlocator | encrypted_blob {| to_self_delay}
+	locator | encrypted_blob | to_self_delay
 	
 `to_self_delay` will only be included if it is also included in the request. 
 
@@ -213,17 +217,17 @@ The signature must be performed following [Data serialisation and signing](#data
 
 #### Rationale
 
-We define appointment as the way that the Watchtower is hired / requested by a client to do its watching services.
+Users must have preregistered before they can hire the Watchtower, as discussed in [User authentication](#user-authentication-and-subscriptions). Appointments from non-registered users are therefore rejected.
 
-Users must be registered before any service can be provided, as discussed in [User authentication](#user-authentication). Appointments from non-registered users are therefore rejected.
+A client may need to update an appointment after having sent it to the tower (for instance to update the fee, change the outputs, etc). The same message can be used to add new appointments or to update existing ones. If two appointments from the same user share a `locator`, the tower should interpret that as an update and override the oldest. `locators` are `128-bit` values so unintended collisions within the same user should be negligible.
 
-A client may need to update an appointment after having sent it to the tower (for instance to update the fee, change the outputs, etc). The same message can be used to add new appointment or to update existing ones. If two appointments from the same user share a `locator`, the tower should interpret that as an update and override the oldest. `locators` are `128-bit` values so unintended collisions within the same user should be unlikely.
+The `encrypted_blob` size depends on the encrypted commitment transaction size and the block size of the chosen cipher. Arbitrarily small/big transaction are invalid, meaning that arbitrarily small/big `encrypted_blob`s will, therefore, also be invalid.
 
-Block ciphers have a size multiple of the block length, which depends on the key size. Therefore the `encrypted_blob` have to be at least as big as:
+The `encrypted_blob` have to be larger than (or equal to):
 
 `cipher_block_size * ceil(minimum_viable_transaction_size / cipher_block_size)`
 
-and at most as big as:
+and smaller than (or equal to):
 
 `cipher_block_size * ceil(maximum_viable_transaction_size / cipher_block_size`) 
 
@@ -231,7 +235,7 @@ and at most as big as:
 
 `encrypted_blob`s outside those boundaries cannot contain valid transactions, so they should be rejected.
 
-A tower should broadcast a penalty transaction right after a breach is seen, but should be also able to bump the fee is necessary. A too small `to_self_delay` can make the tower fail to do so. 
+A tower should broadcast the penalty transaction right after a breach is seen, but should be also able to bump the fee if necessary. If `to_self_delay` is smaller than expected, then it can lead the tower to fail.
 	
 ### The `appointment_accepted` message
 
@@ -266,7 +270,7 @@ The client:
 
 Data must be arranged in the following order to create the receipt:
 
-	[txlocator, encrypted_blob, to_self_delay, user_signature, start_block]
+	locator | encrypted_blob | to_self_delay | user_signature | start_block
 	
 The receipt must be signed following [Data serialisation and signing](#data-serialisation-and-signing).
 
@@ -467,20 +471,40 @@ For example, for a deletion request of appointment identified by locator `4a5e1e
 The storage requirements for a Watchtower can be reduced (linearly) by implementing [shachain](https://github.com/rustyrussell/ccan/blob/master/ccan/crypto/shachain/design.txt), therefore storing the parts required to build the transaction and the corresponding signing key instead of the full transaction. For now, we have decided to keep the hiring protocol simple. Storage is relatively cheap and we can revisit this standard if it becomes a problem. 
 
 ## Attacks on towers
-[TBD]
+There are three main factors that define how easy is, for a malicious user, to attack a tower: the `cost` of hiring the tower, the level of user `privacy` achieved by the service, and who has `access` to the tower's services.
+
+The most vulnerable Watchtower will, therefore, be a cheap, public, and completely privacy preserving tower. Privacy being our mail goal, we've defined parts of this BOLT to prevent cheap attacks, such as favouring subscriptions over single appointments. Here's an example of what subscriptions try to protect from:
+
+### Locator reuse attack
+
+Given a locator `l`, a tower that provides a per-appointment hiring service (appointments can be bought one by one), and complete privacy (no registration), a malicious user could:
+
+* Send `n` appointments to the tower, all identified by `l`
+* Trigger a breach by sending a single old commitment (`txfee`)
+
+The tower will need to store all appointments, since it has no clue which of them is the valid one (if any). On the other hand, the cost for the attacker will only be `n * appointment_cost + txfee`.
+
+Upon detection a breach, the tower will need to decrypt and analyse `n` transactions and left with the decision of what of them to broadcast (if any).
+
+Using subscriptions, the tower will only store a single appointment, since all appointments with the same `l` will be seen as updates. An attacker will need `n` different subscriptions to attempt the same attack. Assuming a subscription has a minimum size of `m` appointments (`m >> 1`), the cost for the attacker will be `n * m * appointment_cost + txfee`. 
+
+Check [Trustless WatchTowers?](https://lists.linuxfoundation.org/pipermail/lightning-dev/2018-April/001203.html) for more on this.
+
+[ADD MORE ATTACKS]
 
 ## FIXMES
 
 - Define a proper tower discovery.
 - None of the message types have been defined (they have been left with ?).
 - Define errors (transient vs permanently).
-- Add attacks on towers
+- Extend attacks on towers
 
 ## DISCUSS
 
-- The tower may also need to reply with `appointment_slots` during the registration phase so a minimum amount of appointments are paid for. Check [Trustless WatchTowers?](https://lists.linuxfoundation.org/pipermail/lightning-dev/2018-April/001203.html). Therefore hiring the tower for a single appointment may be problematic.
+- The tower may also need to reply with `appointment_slots` during the registration phase so a minimum amount of appointments are paid for. Check [Attacks on towers](#attacks-on-towers). Therefore hiring the tower for a single appointment may be problematic.
 - Signature on the deletion acceptance by the server may not be necessary.
 - Appointment deletion can be performed in bulk, by allowing sending more than one appointment at a time. That could result in a privacy leak though, since the tower will be able to link what appointments belonged to the same channel.
+	- Recognition codes, by ZmnSCPxj, may help here.
 - Separate register and top up so proofs can be used for top ups, in a similar way to [Dead Men's Button](https://github.com/joostjager/deadmensbutton)
 
 
