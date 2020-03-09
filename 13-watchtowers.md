@@ -276,7 +276,7 @@ The receipt must be signed following [Data serialisation and signing](#data-seri
 
 #### Rationale
 
-`start_block` sis set by the tower so the user knows when the channel update will be covered. 
+`start_block` is set by the tower so the user knows when the channel update will be covered. 
 
 We assume the tower has a well-known public key and the user is aware of it. The receipt contains, mainly, the information provided by the user. The Watchtower will need to sign the receipt to provide evidence of agreement.
 
@@ -298,7 +298,7 @@ The server:
 * MUST receive `add_update_appointment` before sending an `appointment_rejected` message.
 * MUST set the `locator` to match the one received in `add_update_appointment`.
 * MUST set `rcode` to the rejection code.
-* MAY set and empty `reason` field.
+* MAY set an empty `reason` field.
 * MUST set `reason_len` to length of `reason`.
 
 #### Rationale
