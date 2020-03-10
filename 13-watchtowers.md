@@ -351,7 +351,7 @@ The signature must be performed following [Data serialisation and signing](#data
 
 #### Rationale
 
-Freeing expired appointment from the tower (after a channel clousure or breach) should be beneficial for both parties. From the tower side, it allows to reduce the load and free space, for the user side, it recovers space that was used by expired appointments, so it can be used to back up new channel updates.
+Freeing expired appointment from the tower (after a channel clousure or breach) is beneficial for both parties. From the tower side, it reduces the load and free space, for the user side, it recovers space that was used by expired appointments, so it can be used to back up new channel updates.
 
 ### The `deletion_accepted` message
 
@@ -427,15 +427,15 @@ Sample code (python) for the client to prepare the `encrypted_blob`:
 	
 	def encrypt(penalty_tx, commitment_txid):
 		# The SHA256 of the commitment txid is used as secret key, and 0 (12-byte long) as nonce.
-	   sk = sha256(commitment_txid).digest()
-	   nonce = bytearray(12)
+		sk = sha256(commitment_txid).digest()
+		nonce = bytearray(12)
 	
-	   # Encrypt the data
-	   cipher = ChaCha20Poly1305(sk)
-	   encrypted_blob = cipher.encrypt(nonce=nonce, data=penalty_tx, associated_data=None)
-	   encrypted_blob = hexlify(encrypted_blob).decode("utf8")
+		# Encrypt the data
+		cipher = ChaCha20Poly1305(sk)
+		encrypted_blob = cipher.encrypt(nonce=nonce, data=penalty_tx, associated_data=None)
+		encrypted_blob = hexlify(encrypted_blob).decode("utf8")
 	
-	   return encrypted_blob
+		return encrypted_blob
 	    
 ## Payment modes 
 
@@ -447,11 +447,11 @@ The three most common ways of paying a tower are:
 
 **Subscription**. Watchtower is periodically rewarded / paid for their service to the customer. (e.g. over the lightning network or fiat subscription). 
 
-The bounty approach has the benefit of paying the tower only if the job is done, but lets the customer hire many Watchtowers and only one Watchtower will be rewarded upon collecting the bounty (O(N) storage for each tower). On top of that, the onchain bounty allows a network-wise DoS attack for free. However, it also has the benefit of allowing fee-bumping via CPFP by including an output dedicated to the tower.
+The bounty approach has the benefit of paying the tower only if the job is done, but lets the customer hire many Watchtowers and only one Watchtower will be rewarded upon collecting the bounty (O(N) storage for each tower). On top of that, the onchain bounty allows a network-wise DoS attack for free on the watchtower network. However, it also has the benefit of allowing fee-bumping via CPFP by including an output dedicated to the tower.
 
 The micropayment approach can be achieved using the same method as the subscription approach but setting the `appointment_slots` to one. Both micropayments and subscriptions are favourable for a Watchtower.
 
-The ideal approach could be something in between. The tower is paid via a subscription to cover the storage costs and making DoS attacks having a financial cost. On top of that, the penalty transactions can include an output for the tower so 
+The ideal approach could be something in between. The tower is paid via a subscription to cover the storage costs and making DoS attacks have a financial cost. On top of that, the penalty transactions can include an output for the tower so 
 the tower is encouraged to watch for beaches whilst allowing fee-bumping. 
 
 ## Data serialisation and signing
@@ -471,9 +471,9 @@ For example, for a deletion request of appointment identified by locator `4a5e1e
 The storage requirements for a Watchtower can be reduced (linearly) by implementing [shachain](https://github.com/rustyrussell/ccan/blob/master/ccan/crypto/shachain/design.txt), therefore storing the parts required to build the transaction and the corresponding signing key instead of the full transaction. For now, we have decided to keep the hiring protocol simple. Storage is relatively cheap and we can revisit this standard if it becomes a problem. 
 
 ## Attacks on towers
-There are three main factors that define how easy is, for a malicious user, to attack a tower: the `cost` of hiring the tower, the level of user `privacy` achieved by the service, and who has `access` to the tower's services.
+There are three main factors that define how easy it is, for a malicious user, to attack a tower: the `cost` of hiring the tower, the level of user `privacy` achieved by the service, and who has `access` to the tower's services.
 
-The most vulnerable Watchtower will, therefore, be a cheap, public, and completely privacy preserving tower. Privacy being our mail goal, we've defined parts of this BOLT to prevent cheap attacks, such as favouring subscriptions over single appointments. Here's an example of what subscriptions try to protect from:
+The most vulnerable Watchtower will, therefore, be a cheap, public, and completely privacy preserving tower. Privacy being our mail goal, we have defined parts of this BOLT to prevent cheap attacks, such as favouring subscriptions over single appointments. Here's an example of what subscriptions try to protect from:
 
 ### Locator reuse attack
 
@@ -484,7 +484,7 @@ Given a locator `l`, a tower that provides a per-appointment hiring service (app
 
 The tower will need to store all appointments, since it has no clue which of them is the valid one (if any). On the other hand, the cost for the attacker will only be `n * appointment_cost + txfee`.
 
-Upon detection a breach, the tower will need to decrypt and analyse `n` transactions and left with the decision of what of them to broadcast (if any).
+Upon detecting a breach, the tower will need to decrypt and analyse `n` transactions and left with the decision of which of them to broadcast (if any).
 
 Using subscriptions, the tower will only store a single appointment, since all appointments with the same `l` will be seen as updates. An attacker will need `n` different subscriptions to attempt the same attack. Assuming a subscription has a minimum size of `m` appointments (`m >> 1`), the cost for the attacker will be `n * m * appointment_cost + txfee`. 
 
