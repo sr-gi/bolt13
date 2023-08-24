@@ -84,7 +84,7 @@ The `register_top_up` message contains the information required to start the reg
 
 #### Rationale
 
-We define appointment (in a lack of a better word) as how the Watchtower is hired by a client for its watching services. Every a client updates the state of one of his channels, he will send an appointment containing information related to the update. Check [Sending appointments to the tower](#sending-appointments-to-the-tower) for more on this.
+We define appointment (in a lack of a better word) as how the Watchtower is hired by a client for its watching services. Every client updates the state of one of his channels, he will send an appointment containing information related to the update. Check [Sending appointments to the tower](#sending-appointments-to-the-tower) for more on this.
 
 #### Requirements
 
